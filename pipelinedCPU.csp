@@ -1,0 +1,162 @@
+﻿#import "PAT.Lib.Array";
+
+// used in IF stage
+var pc = -1;
+
+// the idea for those TRANS_ variables is that,
+// within a clock cycle, every stage should be independent of each other.
+// the state is transferred after all the stages.
+
+// used in ID stage
+var instr = -1;
+var trans_instr = -1;
+
+// used in EXE stage
+var cmd = -1;
+var op1 = -1;
+var op2 = -1;
+var op3 = -1;
+var alu_out = -1;
+var trans_cmd = -1;
+var trans_op1 = -1;
+var trans_op2 = -1;
+var trans_op3 = -1;
+var trans_alu_out = -1;
+
+// no MEM stage yet
+
+// used in WB stage
+var write_back_register = -1;
+var trans_write_back_register = -1;
+
+// registers
+var r[31];
+
+// ALU supported operators (commands):
+// add(1), minus(2), multiply(3), divide(4),
+// 
+// basic form: operator, op1, op2, op3
+// means that op2 operator op3 = (assign to) op1
+// e.g.
+// add, r1, r2, r3
+// means that r2 + r3 = r1
+//
+// digit form:
+// 1st digit - operator
+// 2nd digit - op1 (where the result assigns to)
+// 3rd digit - op2
+// 4th digit - op3
+// e.g.
+// 1123 means add, r1, r2, r3 in the basic form
+
+// proposed program to demo data hazard
+var program = [
+	1123, // r2 + r3 = r1
+	2412  // r1 - r2 = r4
+];
+// expected (FAIL)
+#define goal  r[4] == 4;
+// actual (PASS)
+//#define goal  r[4] == -1;
+
+// normal demo
+//var program = [
+//	1123  // r2 + r3 = r1
+//];
+//#define goal  r[1] == 7;
+
+Initialize() = INIT {
+	r[1] = 2;
+	r[2] = 3;
+	r[3] = 4;
+	r[4] = 5;
+} -> Skip;
+
+/********************************************
+ * IF Stage 
+ ********************************************/
+InstructionFetch() = clk -> IF {
+	if (pc + 1 < call(ArrayLength, program)) {
+		pc++;
+		trans_instr = program[pc];
+	} else {
+		trans_instr = -1;
+	}
+} -> trans -> InstructionFetch();
+
+IF2ID() = clk -> trans -> IF2ID_Trans {
+	instr = trans_instr;
+} -> IF2ID();
+
+/********************************************
+ * ID Stage 
+ ********************************************/
+InstructionDecode() = clk -> ID {
+	if (instr != -1) {
+		trans_cmd = instr / 1000;
+		trans_op1 = (instr / 100) % 10;
+		trans_op2 = r[(instr / 10) % 10];
+		trans_op3 = r[instr % 10];
+	} else {
+		trans_cmd = -1;
+		trans_op1 = -1;
+		trans_op2 = -1;
+		trans_op3 = -1;
+	}
+} -> trans -> InstructionDecode();
+
+ID2EX() = clk -> trans -> ID2EX_Trans {
+	cmd = trans_cmd;
+	op1 = trans_op1;
+	op2 = trans_op2;
+	op3 = trans_op3;
+} -> ID2EX();
+
+/********************************************
+ * EX Stage 
+ ********************************************/
+Execution() = clk -> EXE {
+	if (cmd != -1) {
+		if (cmd == 1) { // add
+			trans_alu_out = op2 + op3;
+		} else if (cmd == 2) { // sub
+			trans_alu_out = op2 - op3;
+		} else if (cmd == 3) { // mul
+			trans_alu_out = op2 * op3;
+		} else if (cmd == 4) { // div
+			trans_alu_out = op2 / op3;   // could be div-zero exception
+		}// else {
+			// unsupported command exception
+		//}
+		trans_write_back_register = op1;
+	} else {
+		trans_write_back_register = -1;
+	}
+} -> trans -> Execution();
+
+EX2WB() = clk -> trans -> EX2WB_Trans {
+	alu_out = trans_alu_out;
+	write_back_register = trans_write_back_register;
+} -> EX2WB();
+
+/********************************************
+ * MEM Stage 
+ ********************************************/
+//no MEM stage yet
+ 
+/********************************************
+ * WB Stage 
+ ********************************************/
+WriteBack() = clk -> WB {
+	if (write_back_register != -1) {
+		r[write_back_register] = alu_out;
+	}
+} -> trans -> WriteBack();
+
+/********************************************
+ * Verification Program
+ ********************************************/
+StageTransition() = IF2ID() || ID2EX() || EX2WB();
+Pipeline() = InstructionFetch() || InstructionDecode() || Execution() || WriteBack() || StageTransition();
+CPU() = Initialize(); Pipeline();
+#assert CPU() reaches goal;
