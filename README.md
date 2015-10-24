@@ -1,5 +1,5 @@
-# Formal Methods - Pipelined Microcontroller
-use formal methods to verify the hazards have been correctly handled in the 5-stage pipelined microcontroller.
+# Pipelined Microcontroller
+Use formal methods to verify the hazards have been correctly handled in the 5-stage pipelined microcontroller.
 
 ## Instruction Set
 
