@@ -28,7 +28,7 @@ Use formal methods to verify the hazards have been correctly handled in the 5-st
 * Multiplies register $s by register $t and stores the result in register $d.
 * Ignore the MEM stage.
 * op: $d = $s * $t
-* syntax: multu $d, $s, $t
+* syntax: mult $d, $s, $t
 * encode: 13 ddd sss ttt
 
 **DIV**
