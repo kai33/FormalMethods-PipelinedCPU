@@ -75,7 +75,7 @@ Use formal methods to verify the hazards have been correctly handled in the 5-st
 
 **SAVE**
 * Save value into a memory address from the specified register.
-* Ignore the WB stage.
+* Ignore the EXE, WB stage.
 * op: memory[#d] = $s
 * syntax: save #d, $s
 * encode: 20 ddd sss 000
