@@ -259,6 +259,7 @@ SequentialInstrClk() =clk->{
 			// need to flush
 		} else if (cmd == 18) { // MOVE
 			r[op1] = op2_index;
+			write_back_register = -1;
 		} else if (cmd == 19) { // LOAD
 			r[op1] = memSeq[op2_index];
 			write_back_register = -1;
