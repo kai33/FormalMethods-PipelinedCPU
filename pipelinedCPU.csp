@@ -57,12 +57,23 @@ var program = [
 	11010203, // r2 + r3 = r1
 	12030402  // r4 - r2 = r3
 	*/
-	18020400
+	//18020400
+	
+	// test jump
+	17080000, // jump to line 8 (start from 0)
+	10000001, // noop 1
+	10000002, // noop 2
+	10000003, // noop 3
+	11010203, // r2+r3 = r1
+	10000004, // noop 4
+	10000005, // noop 5
+	10000006, // noop 6
+	11010103  // r1+r3 = r1   -> Jump to here <-
 ];
 // expected (FAIL)
 //#define goal  r[4] == 4;
 // actual (PASS)
-#define goal  r[2] == 5;
+#define goal  r[1] == 6;
 
 // normal demo
 //var program = [
@@ -134,22 +145,29 @@ Execution() = clk -> EXE {
 			trans_alu_out = trans_alu_out;
 		} else if (cmd == 11) { // ADD
 			trans_alu_out = op2 + op3;
+			trans_write_back_register = op1;
 		} else if (cmd == 12) { // SUB
 			trans_alu_out = op2 - op3;
+			trans_write_back_register = op1;
 		} else if (cmd == 13) { // MULT
 			trans_alu_out = op2 * op3;
+			trans_write_back_register = op1;
 		} else if (cmd == 14) { // DIV
 			trans_alu_out = op2 / op3;  // could be div-zero exception
+			trans_write_back_register = op1;
 		} else if (cmd == 15) { // BEQ
 			if( op2 == op3){
 				pc = op1;
 			}
+			trans_write_back_register = -1;
 		} else if (cmd == 16) { // BNE
 			if( op2 != op3){
 				pc = op1;
 			}
+			trans_write_back_register = -1;
 		} else if (cmd == 17) { // JUMP
-			pc = op1;
+			pc = op1 - 1;
+			trans_write_back_register = -1;
 			// need to flush
 		} else if (cmd == 18) { // MOVE
 			trans_alu_out = op2;
@@ -161,7 +179,6 @@ Execution() = clk -> EXE {
 		}// else {
 			// unsupported command exception
 		//}
-		trans_write_back_register = op1;
 	} else {
 		trans_write_back_register = -1;
 	}
