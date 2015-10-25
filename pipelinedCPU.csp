@@ -24,6 +24,7 @@ var trans_op3 = -1;
 var trans_alu_out = -1;
 
 // no MEM stage yet
+var mem[31];
 
 // used in WB stage
 var write_back_register = -1;
@@ -51,13 +52,17 @@ var r[31];
 
 // proposed program to demo data hazard
 var program = [
-	1123, // r2 + r3 = r1
-	2412  // r1 - r2 = r4
+/*
+	15030203, // if r2 != r3, goto #d
+	11010203, // r2 + r3 = r1
+	12030402  // r4 - r2 = r3
+	*/
+	18020400
 ];
 // expected (FAIL)
-#define goal  r[4] == 4;
+//#define goal  r[4] == 4;
 // actual (PASS)
-//#define goal  r[4] == -1;
+#define goal  r[2] == 5;
 
 // normal demo
 //var program = [
@@ -93,10 +98,17 @@ IF2ID() = clk -> trans -> IF2ID_Trans {
  ********************************************/
 InstructionDecode() = clk -> ID {
 	if (instr != -1) {
-		trans_cmd = instr / 1000;
-		trans_op1 = (instr / 100) % 10;
-		trans_op2 = r[(instr / 10) % 10];
-		trans_op3 = r[instr % 10];
+		// extract op3
+		trans_op3 = r[instr % 100];
+		instr = instr / 100;
+		// extract op2
+		trans_op2 = r[instr % 100];
+		instr = instr / 100;
+		// extract op1
+		trans_op1 = instr % 100;
+		instr = instr / 100;
+		// extract cmd
+		trans_cmd = instr;
 	} else {
 		trans_cmd = -1;
 		trans_op1 = -1;
@@ -117,14 +129,35 @@ ID2EX() = clk -> trans -> ID2EX_Trans {
  ********************************************/
 Execution() = clk -> EXE {
 	if (cmd != -1) {
-		if (cmd == 1) { // add
+		if (cmd == 10) { // NOOP
+			// do nothing
+			trans_alu_out = trans_alu_out;
+		} else if (cmd == 11) { // ADD
 			trans_alu_out = op2 + op3;
-		} else if (cmd == 2) { // sub
+		} else if (cmd == 12) { // SUB
 			trans_alu_out = op2 - op3;
-		} else if (cmd == 3) { // mul
+		} else if (cmd == 13) { // MULT
 			trans_alu_out = op2 * op3;
-		} else if (cmd == 4) { // div
-			trans_alu_out = op2 / op3;   // could be div-zero exception
+		} else if (cmd == 14) { // DIV
+			trans_alu_out = op2 / op3;  // could be div-zero exception
+		} else if (cmd == 15) { // BEQ
+			if( op2 == op3){
+				pc = op1;
+			}
+		} else if (cmd == 16) { // BNE
+			if( op2 != op3){
+				pc = op1;
+			}
+		} else if (cmd == 17) { // JUMP
+			pc = op1;
+			// need to flush
+		} else if (cmd == 18) { // MOVE
+			trans_alu_out = op2;
+		} else if (cmd == 19) { // LOAD
+			trans_alu_out = mem[op2];
+		} else if (cmd == 20) { // SAVE
+			// ??
+			mem[op1] = op2;
 		}// else {
 			// unsupported command exception
 		//}
