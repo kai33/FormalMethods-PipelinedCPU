@@ -86,7 +86,7 @@ var program = [
 	// r1 = 6 TRUE
 	*/
 	
-	
+	/*
 	// Test BNE
 	16080102, // jump to line 8 (start from 0)
 	10000001, // noop 1
@@ -98,7 +98,7 @@ var program = [
 	10000006, // noop 6
 	11010103  // r1+r3 = r1   -> Jump to here <-
 	// r1 = 1 TRUE
-	
+	*/
 	
 ];
 // expected (FAIL)
