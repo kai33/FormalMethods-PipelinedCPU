@@ -33,18 +33,16 @@ var cmd = -1;
 var op1 = -1; // stores dest register index
 var op2 = -1; // stores the 2nd register value
 var op2_imm = -1;
-var op2_register_index = -1;
 var op3 = -1; // stores the 3rd register value
-var op3_register_index = -1;
+var op3_imm = -1;
 var alu_out = -1;
 
 var trans_cmd = -1;
 var trans_op1 = -1;
 var trans_op2 = -1;
 var trans_op2_imm = -1;
-var trans_op2_register_index = -1;
 var trans_op3 = -1;
-var trans_op3_register_index = -1;
+var trans_op3_imm = -1;
 var trans_alu_out = -1;
 
 // used in MEM stage
@@ -136,7 +134,6 @@ SeqCPU() =clk-> {
 		instr = instr / 100;
 		
 		// read register value to op2 & read immediate value to op2_imm
-		op2 = r[instr % 100]; // likely out of range exception
 		op2_imm = instr % 100;
 		instr = instr / 100;
 		
@@ -146,6 +143,11 @@ SeqCPU() =clk-> {
 		
 		// read cmd
 		cmd = instr;
+		
+		if (cmd != 18 || cmd != 19) {// not MOVE or not LOAD
+			// prevent possible out of range exception caused by MOVE or LOAD
+			op2 = r[op2_imm];
+		}
 		
 		// do branch & jump in ID stage
 		if (cmd == 15) { // BEQ
