@@ -1,291 +1,246 @@
 ﻿#import "PAT.Lib.Array";
 
+
+//############################################
+// Hardware
+//############################################
+// registers
+var r[31];
+// memory
+var mem[64];
+
+
+//############################################
+// Variables
+//############################################
+
 // used in IF stage
 var pc = -1;
 var pcSeq = -1;
 
-var trans_pc = -1;
-
 // the idea for those TRANS_ variables is that,
 // within a clock cycle, every stage should be independent of each other.
 // the state is transferred after all the stages.
+var trans_pc = -1;
 
 // used in ID stage
 var instr = -1;
+
 var trans_instr = -1;
 
 // used in EXE stage
 var cmd = -1;
-var op1 = -1;
-var op2 = -1;
-var op2_index = -1;
-var op3 = -1;
+var op1 = -1; // stores dest register index
+var op2 = -1; // stores the 2nd register value
+var op2_imm = -1;
+var op2_register_index = -1;
+var op3 = -1; // stores the 3rd register value
+var op3_register_index = -1;
 var alu_out = -1;
+
 var trans_cmd = -1;
 var trans_op1 = -1;
 var trans_op2 = -1;
+var trans_op2_imm = -1;
+var trans_op2_register_index = -1;
 var trans_op3 = -1;
+var trans_op3_register_index = -1;
 var trans_alu_out = -1;
 
-// no MEM stage yet
-var mem[64];
-var memSeq[64];
+// used in MEM stage
+var memory_access = -1; // -1 - no access, 0 - read only, 1 - write only
+var memory_addr = -1; // addr to read from or write to
+var memory_value = -1; // value to read to or write from
+var next_stage_write_back_register = -1;
+var next_stage_write_back_value = -1;
+
+var trans_memory_access = -1;
+var trans_memory_addr = -1;
+var trans_memory_value = -1;
+var trans_next_stage_write_back_register = -1;
+var trans_next_stage_write_back_value = -1;
 
 // used in WB stage
-var write_back_register = -1;
+var write_back_register = -1; // the register to write back to
+var write_back_value = -1; // the value to write back to
 var trans_write_back_register = -1;
+var trans_write_back_value = -1;
 
-// registers
-var r[31];
 
-// ALU supported operators (commands):
-// add(1), minus(2), multiply(3), divide(4),
-// 
-// basic form: operator, op1, op2, op3
-// means that op2 operator op3 = (assign to) op1
-// e.g.
-// add, r1, r2, r3
-// means that r2 + r3 = r1
-//
-// digit form:
-// 1st digit - operator
-// 2nd digit - op1 (where the result assigns to)
-// 3rd digit - op2
-// 4th digit - op3
-// e.g.
-// 1123 means add, r1, r2, r3 in the basic form
+//############################################
+// Program
+// this program tests all the instructions
+//############################################
 
-// proposed program to demo data hazard
-var program = [	
-	/*
-	15030203, // if r2 != r3, goto #d
-	11010203, // r2 + r3 = r1
-	12030402  // r4 - r2 = r3
-	*/
-	//18020400
+var program = [
+	// Test Case: Branching
+	18010100, // r1 = 1
+	18020200, // r2 = 2
+	18030200, // r3 = 2
+	15070302, // jump to pc = 7, if r3 == r2
+	18015500, // r1 = 55
+	18025500, // r2 = 55
+	18035500, // r3 = 55
+	18042500, // r4 = 25 (got executed)
+	16120102, // jump to pc = 12, if r1 != r2
+	18015500, // r1 = 55
+	18025500, // r2 = 55
+	18035500, // r3 = 55
+	18052500, // r5 = 25 (got executed)
+	17170000, // jump to pc = 17
+	18015500, // r1 = 55
+	18025500, // r2 = 55
+	18035500, // r3 = 55
+	18062500, // r6 = 25 (got executed); PC = 17
 	
-	/*
-	// Test jump
-	17080000, // jump to line 8 (start from 0)
-	10000001, // noop 1
-	10000002, // noop 2
-	10000003, // noop 3
-	11010203, // r2+r3 = r1
-	10000004, // noop 4
-	10000005, // noop 5
-	10000006, // noop 6
-	11010103  // r1+r3 = r1   -> Jump to here <-
-	*/
+	// Test Case: Basic operations
+	18010100, // r1 = 1
+	18020200, // r2 = 2
+	11030102, // r3 = r1 + r2; r3 is 3
+	12040302, // r4 = r3 - r2; r4 is 1
+	13050302, // r5 = r3 * r2; r5 is 6
+	10000000, // noop
+	14060503, // r6 = r5 / r3; r6 is 2; PC = 24
 	
-	/*
-	// Test BEQ
-	15080101, // jump to line 8 (start from 0)
-	10000001, // noop 1
-	10000002, // noop 2
-	10000003, // noop 3
-	11010203, // r2+r3 = r1
-	10000004, // noop 4
-	10000005, // noop 5
-	10000006, // noop 6
-	11010103  // r1+r3 = r1   -> Jump to here <-
-	// r1 = 6 TRUE
-	*/
-	
-	
-	// Test BNE
-	16080102, // jump to line 8 (start from 0)
-	10000001, // noop 1
-	10000002, // noop 2
-	10000003, // noop 3
-	11010203, // r2+r3 = r1
-	10000004, // noop 4
-	10000005, // noop 5
-	10000006, // noop 6
-	11010103  // r1+r3 = r1   -> Jump to here <-
-	// r1 = 6 TRUE
-	
-
+	// Test Case: Memory Access
+	18011500, // r1 = 15
+	20010100, // mem[01] = r1
+	19020100  // r2 = mem[01]; PC = 27
 ];
 
-// expected (FAIL)
-//#define goal  r[4] == 4;
-// actual (PASS)
-#define goal  r[1] == 6 && pc == 8;
 
-// normal demo
-//var program = [
-//	1123  // r2 + r3 = r1
-//];
-//#define goal  r[1] == 7;
+//############################################
+// Verifiable conditions
+//############################################
+#define correct_branching r[1] == 1 && r[2] == 2 && r[3] == 2 && r[4] == 25 && r[5] == 25 && r[6] == 25 && pcSeq == 17;
+#define correct_basic_operation r[3] == 3 && r[4] == 1 && r[5] == 6 && r[6] == 2 && pcSeq == 24;
+#define correct_memory_access mem[1] == 15 && r[2] == 15 && pcSeq == 27;
 
 
-
-var programSeq = [
-/*
-// Test Add, Sub
-11030102, // r1+r2=r3
-12040302, //r3-r2=r4
-11050104, // r1+r4=r5
-11060205 // r2+r5=r6
-*/
-
-/*
-// Test Mult, Div
-13020101, // r1*r1=r2
-14010402 // r4/r2=r1
-*/
-
-/*
-// Test BEQ
-15030102, // If r1=r2, jump to the 3th instr starting from 0
-11030405, //r4+r5=r3
-12030605, // r6-r5=r3
-13030406, // r4*r6=r3     <----- Jump to here
-13030506 // r5*r6=r3
-*/
-
-/*
-// Test BNQ
-16030102, // If r1!=r2, jump to the 3th instr starting from 0
-11030405, //r4+r5=r3
-12030605, // r6-r5=r3
-13030406, // r4*r6=r3     <----- Jump to here
-13030506 // r5*r6=r3
-*/
-
-/*
-// Test Jump
-17030000, //Jump to the 3th instr starting from 0
-11030405, //r4+r5=r3
-12030605, // r6-r5=r3
-13030406, // r4*r6=r3     <----- Jump to here
-13030506 // r5*r6=r3
-*/
-
-/*
-//Test Save and Load
-20100300,// Save r3's value to mem[10]
-19021000 // Load value from mem[10] to r2
-*/
-
-//Test Move
-18020900 // Assign value 9 to r2
-];
-
-#define goalSeq  r[2]==9;
-
-InitializeSeq() = INITSeq {
-	r[1] = 2;
-	r[2] = 3;
-	r[3] = 4;
-	r[4] = 5;
-	r[5] = 7;
-	r[6] = 8;
-	var i = 0;
-	while(i<64){
-		memSeq[i]=0;
-		i++;
-	}
-	
-} -> Skip;
-
-Initialize() = INIT {
-	r[1] = 2;
-	r[2] = 3;
-	r[3] = 4;
-	r[4] = 5;
-	r[5] = 7;
-	r[6] = 8;
-} -> Skip;
-
-/******************************************
- * Sequential CPU
-********************************************/
-SequentialInstrClk() =clk->{
+//############################################
+// Sequential CPU
+//############################################
+SeqCPU() =clk-> {
 	//IF
 	if (pcSeq + 1 < call(ArrayLength, program)) {
 		pcSeq++;
-		instr = programSeq[pcSeq];
+		instr = program[pcSeq];
 	} else {
 		instr = -1;
 	}
+	
 	//ID
 	if (instr != -1) {
-		// extract op3
+		// read register value to op3
 		op3 = r[instr % 100];
 		instr = instr / 100;
-		// extract op2
-		op2 = r[instr % 100];
-		op2_index = instr % 100;
+		
+		// read register value to op2 & read immediate value to op2_imm
+		op2 = r[instr % 100]; // likely out of range exception
+		op2_imm = instr % 100;
 		instr = instr / 100;
-		// extract op1
+		
+		// read register index to op1
 		op1 = instr % 100;
 		instr = instr / 100;
-		// extract cmd
+		
+		// read cmd
 		cmd = instr;
+		
+		// do branch & jump in ID stage
+		if (cmd == 15) { // BEQ
+			if(op2 == op3) {
+				pcSeq = op1 - 1;
+			}
+			cmd = -1;
+			memory_access = -1;
+			write_back_register = -1;
+		} else if (cmd == 16) { // BNE
+			if(op2 != op3) {
+				pcSeq = op1 - 1;
+			}
+			cmd = -1;
+			memory_access = -1;
+			write_back_register = -1;
+		} else if (cmd == 17) { // JUMP
+			pcSeq = op1 - 1;
+			cmd = -1;
+			memory_access = -1;
+			write_back_register = -1;
+		}
 	} else {
 		cmd = -1;
 		op1 = -1;
 		op2 = -1;
+		op2_imm = -1;
 		op3 = -1;
 	}
+	
 	//EXE
 	if (cmd != -1) {
 		if (cmd == 10) { // NOOP
 			// do nothing
 			alu_out = alu_out;
+			memory_access = -1;
+			write_back_register = -1;
 		} else if (cmd == 11) { // ADD
 			alu_out = op2 + op3;
+			memory_access = -1;
 			write_back_register = op1;
 		} else if (cmd == 12) { // SUB
 			alu_out = op2 - op3;
+			memory_access = -1;
 			write_back_register = op1;
 		} else if (cmd == 13) { // MULT
 			alu_out = op2 * op3;
+			memory_access = -1;
 			write_back_register = op1;
 		} else if (cmd == 14) { // DIV
 			alu_out = op2 / op3;  // could be div-zero exception
+			memory_access = -1;
 			write_back_register = op1;
-		} else if (cmd == 15) { // BEQ
-			if( op2 == op3){
-				pcSeq = op1 - 1;
-			}
-			write_back_register = -1;
-		} else if (cmd == 16) { // BNE
-			if( op2 != op3){
-				pcSeq = op1 - 1;
-			}
-			write_back_register = -1;
-		} else if (cmd == 17) { // JUMP
-			pcSeq = op1 - 1;
-			write_back_register = -1;
-			// need to flush
 		} else if (cmd == 18) { // MOVE
-			r[op1] = op2_index;
-			write_back_register = -1;
+			alu_out = op2_imm;
+			memory_access = -1;
+			write_back_register = op1;
 		} else if (cmd == 19) { // LOAD
-			r[op1] = memSeq[op2_index];
-			write_back_register = -1;
-			//alu_out = memSeq[op2];
+			memory_access = 0; // read from memo
+			memory_addr = op2_imm;
+			write_back_register = op1;
 		} else if (cmd == 20) { // SAVE
-			// ??
-			memSeq[op1] = op2;
+			memory_access = 1; // write to memo
+			memory_addr = op1;
+			memory_value = op2;
 			write_back_register = -1;
-		}// else {
-			// unsupported command exception
-		//}
+		} else {
+			write_back_register = -1;
+		}
 	} else {
 		write_back_register = -1;
 	}
+	
+	//MEM
+	if (memory_access == 0) {
+		// read from memory to register
+		write_back_value = mem[memory_addr];
+	} else if (memory_access == 1) {
+		// write to memory from register
+		mem[memory_addr] = memory_value;
+	} else {
+		// no memory access needed
+		write_back_value = alu_out;
+	}
+	
 	//WB
 	if (write_back_register != -1) {
-		r[write_back_register] = alu_out;
+		r[write_back_register] = write_back_value;
 	}
-}->SequentialInstrClk();
+}->SeqCPU();
 
 
-
-
+//############################################
+// Pipeline CPU
+//############################################
 
 /********************************************
  * IF Stage 
@@ -407,11 +362,19 @@ WriteBack() = clk -> WB {
 } -> trans -> WriteBack();
 
 /********************************************
- * Verification Program
+ * Pipelining each stage and transition
  ********************************************/
 StageTransition() = IF2ID() || ID2EX() || EX2WB();
-Pipeline() = InstructionFetch() || InstructionDecode() || Execution() || WriteBack() || StageTransition();
-CPU() = Initialize(); Pipeline();
-SeqCPU() = InitializeSeq();SequentialInstrClk();
-#assert CPU() reaches goal;
-#assert SeqCPU() reaches goalSeq;
+PipelineCPU() = InstructionFetch() || InstructionDecode() || Execution() || WriteBack() || StageTransition();
+
+
+//############################################
+// Verification
+//############################################
+
+#assert PipelineCPU() reaches correct_basic_operation;
+#assert PipelineCPU() reaches correct_branching;
+#assert PipelineCPU() reaches correct_memory_access;
+#assert SeqCPU() reaches correct_basic_operation;
+#assert SeqCPU() reaches correct_branching;
+#assert SeqCPU() reaches correct_memory_access;
