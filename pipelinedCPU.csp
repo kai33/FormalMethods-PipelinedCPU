@@ -4,8 +4,9 @@
 //############################################
 // Hardware
 //############################################
+
 // registers
-var r[31];
+var r[32];
 // memory
 var mem[64];
 
@@ -96,7 +97,7 @@ var program = [
 	18015500, // r1 = 55
 	18025500, // r2 = 55
 	18035500, // r3 = 55
-	18062500, // r6 = 25 (got executed); PC = 17
+	18062500, // r6 = 25 (got executed)
 	
 	// Test Case: Basic operations
 	18010100, // r1 = 1
@@ -105,18 +106,19 @@ var program = [
 	12040302, // r4 = r3 - r2; r4 is 1 (data hazards)
 	13050302, // r5 = r3 * r2; r5 is 6 (data hazards)
 	10000000, // noop
-	14060503, // r6 = r5 / r3; r6 is 2; PC = 24 (data hazards)
+	14060503, // r6 = r5 / r3; r6 is 2 (data hazards)
 	
 	// Test Case: Memory Access
 	18011500, // r1 = 15
 	20010100, // mem[01] = r1 (data hazards)
-	19020100  // r2 = mem[01]; PC = 27
+	19020100  // r2 = mem[01];
 ];
 
 
 //############################################
 // Verifiable conditions
 //############################################
+
 #define correct_branching r[1] == 1 && r[2] == 2 && r[3] == 2 && r[4] == 25 && r[5] == 25 && r[6] == 25;
 #define correct_basic_operation r[1] == 1 && r[2] == 2 && r[3] == 3 && r[4] == 1 && r[5] == 6 && r[6] == 2;
 #define correct_memory_access r[1] == 15 && mem[1] == 15 && r[2] == 15;
@@ -308,7 +310,7 @@ InstructionDecode() = clk -> ID {
 			pc_in_ID = op1_in_ID - 1;
 			cmd_in_ID = -1;
 			write_back_register_in_MEM = -1;
-		} else {
+		} else { // no need change pc
 			pc_in_ID = -1;
 		}
 	} else {
