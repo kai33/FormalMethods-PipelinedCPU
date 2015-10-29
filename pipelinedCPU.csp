@@ -14,56 +14,63 @@ var mem[64];
 // Variables
 //############################################
 
-// used in IF stage
+// states used in IF stage
+// in
 var pc = -1;
-var pcSeq = -1;
+// out
+var instr_in_IF = -1;
 
-// the idea for those TRANS_ variables is that,
-// within a clock cycle, every stage should be independent of each other.
-// the state is transferred after all the stages.
-var trans_pc = -1;
-
-// used in ID stage
+// states used in ID stage
+// in
 var instr = -1;
+// out
+var pc_in_ID = -1;
+var cmd_in_ID = -1;
+var op1_in_ID = -1;
+var op2_in_ID = -1;
+var op2_imm_in_ID = -1;
+var op3_in_ID = -1;
+var op3_imm_in_ID = -1;
 
-var trans_instr = -1;
-
-// used in EXE stage
+// states used in EXE stage
+// in
 var cmd = -1;
 var op1 = -1; // stores dest register index
 var op2 = -1; // stores the 2nd register value
 var op2_imm = -1;
 var op3 = -1; // stores the 3rd register value
 var op3_imm = -1;
-var alu_out = -1;
-
-var trans_cmd = -1;
-var trans_op1 = -1;
-var trans_op2 = -1;
-var trans_op2_imm = -1;
-var trans_op3 = -1;
-var trans_op3_imm = -1;
-var trans_alu_out = -1;
+// out
+var op2_imm_in_EX = -1;
+var op3_imm_in_EX = -1;
+var alu_out_in_EX = -1;
+var memory_access_in_EX = -1;
+var memory_addr_in_EX = -1;
+var write_back_register_in_EX = -1;
 
 // used in MEM stage
+// in
+var op2_imm_from_EX = -1;
+var op3_imm_from_EX = -1;
+var alu_out = -1;
 var memory_access = -1; // -1 - no access, 0 - read only, 1 - write only
 var memory_addr = -1; // addr to read from or write to
-var memory_value = -1; // value to read to or write from
-var next_stage_write_back_register = -1;
-var next_stage_write_back_value = -1;
-
-var trans_memory_access = -1;
-var trans_memory_addr = -1;
-var trans_memory_value = -1;
-var trans_next_stage_write_back_register = -1;
-var trans_next_stage_write_back_value = -1;
+var write_back_register_from_EX = -1;
+// out
+var op2_imm_in_MEM = -1;
+var op3_imm_in_MEM = -1;
+var write_back_register_in_MEM = -1;
+var write_back_value_in_MEM = -1;
 
 // used in WB stage
+// in
+var op2_imm_from_MEM = -1;
+var op3_imm_from_MEM = -1;
 var write_back_register = -1; // the register to write back to
 var write_back_value = -1; // the value to write back to
-var trans_write_back_register = -1;
-var trans_write_back_value = -1;
-
+// out
+var op2_imm_in_WB = -1;
+var op3_imm_in_WB = -1;
 
 //############################################
 // Program
@@ -75,17 +82,17 @@ var program = [
 	18010100, // r1 = 1
 	18020200, // r2 = 2
 	18030200, // r3 = 2
-	15070302, // jump to pc = 7, if r3 == r2
+	15070302, // jump to pc = 7, if r3 == r2 (data hazards + control hazards)
 	18015500, // r1 = 55
 	18025500, // r2 = 55
 	18035500, // r3 = 55
 	18042500, // r4 = 25 (got executed)
-	16120102, // jump to pc = 12, if r1 != r2
+	16120102, // jump to pc = 12, if r1 != r2 (control hazards)
 	18015500, // r1 = 55
 	18025500, // r2 = 55
 	18035500, // r3 = 55
 	18052500, // r5 = 25 (got executed)
-	17170000, // jump to pc = 17
+	17170000, // jump to pc = 17 (control hazards)
 	18015500, // r1 = 55
 	18025500, // r2 = 55
 	18035500, // r3 = 55
@@ -94,15 +101,15 @@ var program = [
 	// Test Case: Basic operations
 	18010100, // r1 = 1
 	18020200, // r2 = 2
-	11030102, // r3 = r1 + r2; r3 is 3
-	12040302, // r4 = r3 - r2; r4 is 1
-	13050302, // r5 = r3 * r2; r5 is 6
+	11030102, // r3 = r1 + r2; r3 is 3 (data hazards)
+	12040302, // r4 = r3 - r2; r4 is 1 (data hazards)
+	13050302, // r5 = r3 * r2; r5 is 6 (data hazards)
 	10000000, // noop
-	14060503, // r6 = r5 / r3; r6 is 2; PC = 24
+	14060503, // r6 = r5 / r3; r6 is 2; PC = 24 (data hazards)
 	
 	// Test Case: Memory Access
 	18011500, // r1 = 15
-	20010100, // mem[01] = r1
+	20010100, // mem[01] = r1 (data hazards)
 	19020100  // r2 = mem[01]; PC = 27
 ];
 
@@ -110,9 +117,9 @@ var program = [
 //############################################
 // Verifiable conditions
 //############################################
-#define correct_branching r[1] == 1 && r[2] == 2 && r[3] == 2 && r[4] == 25 && r[5] == 25 && r[6] == 25 && pcSeq == 17;
-#define correct_basic_operation r[3] == 3 && r[4] == 1 && r[5] == 6 && r[6] == 2 && pcSeq == 24;
-#define correct_memory_access mem[1] == 15 && r[2] == 15 && pcSeq == 27;
+#define correct_branching r[1] == 1 && r[2] == 2 && r[3] == 2 && r[4] == 25 && r[5] == 25 && r[6] == 25;
+#define correct_basic_operation r[1] == 1 && r[2] == 2 && r[3] == 3 && r[4] == 1 && r[5] == 6 && r[6] == 2;
+#define correct_memory_access r[1] == 15 && mem[1] == 15 && r[2] == 15;
 
 
 //############################################
@@ -120,9 +127,9 @@ var program = [
 //############################################
 SeqCPU() =clk-> {
 	//IF
-	if (pcSeq + 1 < call(ArrayLength, program)) {
-		pcSeq++;
-		instr = program[pcSeq];
+	if (pc + 1 < call(ArrayLength, program)) {
+		pc++;
+		instr = program[pc];
 	} else {
 		instr = -1;
 	}
@@ -152,20 +159,20 @@ SeqCPU() =clk-> {
 		// do branch & jump in ID stage
 		if (cmd == 15) { // BEQ
 			if(op2 == op3) {
-				pcSeq = op1 - 1;
+				pc = op1 - 1;
 			}
 			cmd = -1;
 			memory_access = -1;
 			write_back_register = -1;
 		} else if (cmd == 16) { // BNE
 			if(op2 != op3) {
-				pcSeq = op1 - 1;
+				pc = op1 - 1;
 			}
 			cmd = -1;
 			memory_access = -1;
 			write_back_register = -1;
 		} else if (cmd == 17) { // JUMP
-			pcSeq = op1 - 1;
+			pc = op1 - 1;
 			cmd = -1;
 			memory_access = -1;
 			write_back_register = -1;
@@ -212,7 +219,7 @@ SeqCPU() =clk-> {
 		} else if (cmd == 20) { // SAVE
 			memory_access = 1; // write to memo
 			memory_addr = op1;
-			memory_value = op2;
+			alu_out = op2;
 			write_back_register = -1;
 		} else {
 			write_back_register = -1;
@@ -227,7 +234,7 @@ SeqCPU() =clk-> {
 		write_back_value = mem[memory_addr];
 	} else if (memory_access == 1) {
 		// write to memory from register
-		mem[memory_addr] = memory_value;
+		mem[memory_addr] = alu_out;
 	} else {
 		// no memory access needed
 		write_back_value = alu_out;
@@ -247,127 +254,212 @@ SeqCPU() =clk-> {
 /********************************************
  * IF Stage 
  ********************************************/
+
 InstructionFetch() = clk -> IF {
 	if (pc + 1 < call(ArrayLength, program)) {
 		pc++;
-		trans_instr = program[pc];
+		instr_in_IF = program[pc];
 	} else {
-		trans_instr = -1;
+		instr_in_IF = -1;
 	}
 } -> trans -> InstructionFetch();
-
-IF2ID() = clk -> trans -> IF2ID_Trans {
-	instr = trans_instr;
-} -> IF2ID();
 
 /********************************************
  * ID Stage 
  ********************************************/
+
 InstructionDecode() = clk -> ID {
 	if (instr != -1) {
 		// extract op3
-		trans_op3 = r[instr % 100];
+		op3_imm_in_ID = instr % 100;
+		op3_in_ID = r[op3_imm_in_ID];
 		instr = instr / 100;
+		
 		// extract op2
-		trans_op2 = r[instr % 100];
+		op2_imm_in_ID = instr % 100;
 		instr = instr / 100;
+		
 		// extract op1
-		trans_op1 = instr % 100;
+		op1_in_ID = instr % 100;
 		instr = instr / 100;
+		
 		// extract cmd
-		trans_cmd = instr;
+		cmd_in_ID = instr;
+		
+		if (cmd_in_ID != 18 || cmd_in_ID != 19) {// not MOVE or not LOAD
+			// try to prevent possible Out of Range exception caused by
+			// MOVE or LOAD instructions
+			op2_in_ID = r[op2_imm_in_ID];
+		}
+		
+		if (cmd_in_ID == 15) { // BEQ
+			if(op2_in_ID == op3_in_ID){
+				pc_in_ID = op1_in_ID - 1;
+			}
+			cmd_in_ID = -1;
+			write_back_register_in_MEM = -1;
+		} else if (cmd_in_ID == 16) { // BNE
+			if(op2_in_ID != op3_in_ID){
+				pc_in_ID = op1_in_ID - 1;
+			}
+			cmd_in_ID = -1;
+			write_back_register_in_MEM = -1;
+		} else if (cmd_in_ID == 17) { // JUMP
+			pc_in_ID = op1_in_ID - 1;
+			cmd_in_ID = -1;
+			write_back_register_in_MEM = -1;
+		} else {
+			pc_in_ID = -1;
+		}
 	} else {
-		trans_cmd = -1;
-		trans_op1 = -1;
-		trans_op2 = -1;
-		trans_op3 = -1;
+		cmd_in_ID = -1;
+		op1_in_ID = -1;
+		op2_in_ID = -1;
+		op2_imm_in_ID = -1;
+		op3_in_ID = -1;
+		op3_imm_in_ID = -1;
+		pc_in_ID = -1;
 	}
 } -> trans -> InstructionDecode();
-
-ID2EX() = clk -> trans -> ID2EX_Trans {
-	cmd = trans_cmd;
-	op1 = trans_op1;
-	op2 = trans_op2;
-	op3 = trans_op3;
-} -> ID2EX();
 
 /********************************************
  * EX Stage 
  ********************************************/
+
 Execution() = clk -> EXE {
 	if (cmd != -1) {
-		trans_pc = -1;
+		op2_imm_in_EX = op2_imm;
+		op3_imm_in_EX = op3_imm;
+		
 		if (cmd == 10) { // NOOP
 			// do nothing
-			trans_alu_out = trans_alu_out;
+			memory_access_in_EX = -1;
+			write_back_register_in_EX = -1;
 		} else if (cmd == 11) { // ADD
-			trans_alu_out = op2 + op3;
-			trans_write_back_register = op1;
+			alu_out_in_EX = op2 + op3;
+			memory_access_in_EX = -1;
+			write_back_register_in_EX = op1;
 		} else if (cmd == 12) { // SUB
-			trans_alu_out = op2 - op3;
-			trans_write_back_register = op1;
+			alu_out_in_EX = op2 - op3;
+			memory_access_in_EX = -1;
+			write_back_register_in_EX = op1;
 		} else if (cmd == 13) { // MULT
-			trans_alu_out = op2 * op3;
-			trans_write_back_register = op1;
+			alu_out_in_EX = op2 * op3;
+			memory_access_in_EX = -1;
+			write_back_register_in_EX = op1;
 		} else if (cmd == 14) { // DIV
-			trans_alu_out = op2 / op3;  // could be div-zero exception
-			trans_write_back_register = op1;
-		} else if (cmd == 15) { // BEQ
-			if( op2 == op3){
-				trans_pc = op1 - 1;
-			}
-			trans_write_back_register = -1;
-		} else if (cmd == 16) { // BNE
-			if( op2 != op3){
-				trans_pc = op1 - 1;
-			}
-			trans_write_back_register = -1;
-		} else if (cmd == 17) { // JUMP
-			trans_pc = op1 - 1;
-			trans_write_back_register = -1;
-			// need to flush
+			alu_out_in_EX = op2 / op3;  // could be div-zero exception
+			memory_access_in_EX = -1;
+			write_back_register_in_EX = op1;
 		} else if (cmd == 18) { // MOVE
-			trans_alu_out = op2;
+			alu_out_in_EX = op2_imm;
+			memory_access_in_EX = -1;
+			write_back_register_in_EX = op1;
 		} else if (cmd == 19) { // LOAD
-			trans_alu_out = mem[op2];
+			memory_access_in_EX = 0; // read from memo
+			memory_addr_in_EX = op2_imm;
+			write_back_register_in_EX = op1;
 		} else if (cmd == 20) { // SAVE
-			// ??
-			mem[op1] = op2;
-		}// else {
-			// unsupported command exception
-		//}
+			memory_access_in_EX = 1; // write to memo
+			memory_addr_in_EX = op1;
+			alu_out_in_EX = op2;
+			write_back_register_in_EX = -1;
+		} 
 	} else {
-		trans_write_back_register = -1;
+		memory_access_in_EX = -1;
+		write_back_register_in_EX = -1;
 	}
 } -> trans -> Execution();
-
-EX2WB() = clk -> trans -> EX2WB_Trans {
-	alu_out = trans_alu_out;
-	write_back_register = trans_write_back_register;
-	if (trans_pc != -1){
-		pc = trans_pc;
-	}
-} -> EX2WB();
 
 /********************************************
  * MEM Stage 
  ********************************************/
-//no MEM stage yet
+MemoryAccess() = clk -> MEM {
+	if (memory_access == 0) {
+		//read memo
+		write_back_value_in_MEM = mem[memory_addr];
+	} else if (memory_access == 1) {
+		// write to memory from register
+		mem[memory_addr] = alu_out;
+	} else {
+		// no memory access needed
+		write_back_value_in_MEM = alu_out;
+	}
+	
+	op2_imm_in_MEM = op2_imm_from_EX;
+	op3_imm_in_MEM = op3_imm_from_EX;
+	write_back_register_in_MEM = write_back_register_from_EX;
+} -> trans -> MemoryAccess();
  
 /********************************************
  * WB Stage 
  ********************************************/
 WriteBack() = clk -> WB {
 	if (write_back_register != -1) {
-		r[write_back_register] = alu_out;
+		r[write_back_register] = write_back_value;
 	}
+	op2_imm_in_WB = op2_imm_from_MEM;
+	op3_imm_in_WB = op3_imm_from_MEM;
 } -> trans -> WriteBack();
 
 /********************************************
  * Pipelining each stage and transition
  ********************************************/
-StageTransition() = IF2ID() || ID2EX() || EX2WB();
-PipelineCPU() = InstructionFetch() || InstructionDecode() || Execution() || WriteBack() || StageTransition();
+
+StageTransition() = clk -> trans -> Transition {
+	// Control Hazards handling by Flushing
+	if (pc_in_ID != -1){
+		pc = pc_in_ID;
+		instr = 10000000; // flush
+	} else {
+		// IF -> ID
+		instr = instr_in_IF;
+	}
+	
+	// Data Hazards handling by Data Forwarding
+	// try to forward EX result to ID
+	if (op2_imm_in_ID == op1 && cmd_in_ID != 18 && cmd_in_ID != 19) {
+		op2_in_ID = alu_out_in_EX;
+	} else if (op3_imm_in_ID == op1) {
+		op3_in_ID = alu_out_in_EX;
+	} 
+	// try to forward MEM result to ID
+	else if (op2_imm_in_ID == write_back_register_in_MEM && cmd_in_ID != 18 && cmd_in_ID != 19) {
+		op2_in_ID = alu_out;
+	} else if (op3_imm_in_ID == write_back_register_in_MEM) {
+		op3_in_ID = alu_out;
+	}
+	// try to forward WB result to ID
+	else if (op2_imm_in_ID == write_back_register && cmd_in_ID != 18 && cmd_in_ID != 19) {
+		op2_in_ID = write_back_value;
+	} else if (op3_imm_in_ID == write_back_register) {
+		op3_in_ID = write_back_value;
+	}
+	
+	// ID -> EX
+	cmd = cmd_in_ID;
+	op1 = op1_in_ID;
+	op2 = op2_in_ID;
+	op2_imm = op2_imm_in_ID;
+	op3 = op3_in_ID;
+	op3_imm = op3_imm_in_ID;
+	
+	// EX -> MEM
+	op2_imm_from_EX = op2_imm_in_EX;
+	op3_imm_from_EX = op3_imm_in_EX;
+	alu_out = alu_out_in_EX;
+	memory_access = memory_access_in_EX;
+	memory_addr = memory_addr_in_EX;
+	write_back_register_from_EX = write_back_register_in_EX;
+	
+	// MEM -> WB
+	op2_imm_from_MEM = op2_imm_in_MEM;
+	op3_imm_from_MEM = op3_imm_in_MEM;
+	write_back_register = write_back_register_in_MEM;
+	write_back_value = write_back_value_in_MEM;
+} -> StageTransition();
+
+PipelineCPU() = InstructionFetch() || InstructionDecode() || Execution() || MemoryAccess() || WriteBack() || StageTransition();
 
 
 //############################################
